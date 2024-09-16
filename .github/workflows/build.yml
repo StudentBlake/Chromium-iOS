@@ -48,8 +48,6 @@ jobs:
         cp -r chromium.app Payload/
         zip -r chromium.ipa Payload
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: ios-app
-        path: ~/chromium/src/out/Release-iphoneos/chromium.ipa
+    - name: Upload to temp.sh
+      run: |
+        curl -F "file=@chromium.ipa" https://temp.sh/upload
