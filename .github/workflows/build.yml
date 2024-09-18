@@ -27,7 +27,7 @@ jobs:
           
           # Fetch Chromium for iOS
           mkdir chromium && cd chromium
-          fetch ios
+          fetch ios --nohistory
           cd src
 
 
