@@ -1,10 +1,7 @@
-name: Build iOS IPA
+name: Build Blink Chrome for iOS
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
     branches:
       - main
   workflow_dispatch:
@@ -12,42 +9,44 @@ on:
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Install depot_tools
-      run: |
-        cd $HOME
-        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-        echo "$HOME/depot_tools" >> $GITHUB_PATH
+      - name: Install Xcode
+        run: |
+          sudo xcode-select --switch /Applications/Xcode.app
+          sudo xcodebuild -license accept
 
-    - name: Fetch Chromium Source
-      run: |
-        cd $HOME
-        mkdir -p ~/chromium && cd ~/chromium
-        fetch --no-history ios 
-        cd src
-        gclient sync
+      - name: Install Dependencies
+        run: |
+          # Install depot_tools
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          echo 'export PATH="$PATH:$PWD/depot_tools"' >> ~/.bash_profile
+          source ~/.bash_profile
 
-    - name: Generate Build Files
-      run: |
-        cd ~/chromium/src && mkdir -p out/Release-iphoneos
-        gn gen out/Release-iphoneos --args='is_debug=false target_os="ios" ios_enable_code_signing=false target_cpu="arm64" use_blink=true'
+          # Fetch Chromium for iOS
+          mkdir chromium && cd chromium
+          fetch ios --no-history
+          cd src
 
-    - name: Build Chromium for iOS
-      run: |
-        cd ~/chromium/src
-        autoninja -C out/Release-iphoneos chrome
+      - name: Build Blink Chrome for iOS
+        run: |
+          # Set up the build for Blink on iOS
+          echo "[gn_args]" > ~/.setup-gn
+          echo "use_blink = true" >> ~/.setup-gn
 
-    - name: Create .ipa File
-      run: |
-        cd ~/chromium/src/out/Release-iphoneos
-        mkdir -p Payload
-        cp -r chromium.app Payload/
-        zip -r chromium.ipa Payload
+          # Run the setup script
+          python3 ios/build/tools/setup-gn.py
 
-    - name: Upload to temp.sh
-      run: |
-        curl -F "file=@chromium.ipa" https://temp.sh/upload
+          # Build Blink Chrome for iOS
+          autoninja -C out/Release-iphonesimulator content_shell
+
+      - name: Archive IPA
+        run: |
+          cd out/Release-iphonesimulator
+          xcodebuild -exportArchive -archivePath content_shell.xcarchive -exportOptionsPlist ExportOptions.plist -exportPath content_shell
+
+      - name: Upload IPA to temp.sh
+        run: |
+          curl -F "file=@out/Release-iphonesimulator/content_shell/content_shell.ipa" https://temp.sh/upload
