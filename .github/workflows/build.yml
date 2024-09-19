@@ -26,9 +26,8 @@ jobs:
           source ~/.bash_profile
           
           # Fetch Chromium for iOS
-          mkdir chromium && cd chromium
-          fetch ios --nohistory
-          cd src
+          git clone --depth 1 https://source.chromium.org/chromium/chromium/src/+/main:ios/ chromium
+          cd chromium
 
 
       - name: Build Blink Chrome for iOS
@@ -38,7 +37,7 @@ jobs:
           echo "use_blink = true" >> ~/.setup-gn
 
           # Run the setup script
-          python3 ios/build/tools/setup-gn.py
+          python3 build/tools/setup-gn.py
 
           # Build Blink Chrome for iOS
           autoninja -C out/Release-iphonesimulator content_shell
