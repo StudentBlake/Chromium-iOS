@@ -1,4 +1,4 @@
-name: Build Chromium Blink for iOS
+name: Build Chromium Blink for iOS (Optimized)
 
 on:
   push:
@@ -13,21 +13,41 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (Shallow)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # Only fetch the latest commit.  CRUCIAL optimization.
 
-      - name: Set up depot_tools
+      - name: Set up depot_tools (Cached)
+        uses: actions/cache@v4
+        id: cache-depot-tools
+        with:
+          path: depot_tools
+          key: ${{ runner.os }}-depot-tools-v1
+
+      - name: Install depot_tools (if not cached)
+        if: steps.cache-depot-tools.outputs.cache-hit != 'true'
         run: |
           git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
           echo "$(pwd)/depot_tools" >> $GITHUB_PATH
 
-      - name: Fetch Chromium source
+      - name: Fetch Chromium source (Shallow, No Hooks)
         run: |
           mkdir chromium && cd chromium
-          fetch --nohooks ios
-          gclient sync --nohooks --with_branch_heads --with_tags
+          fetch --nohooks ios --no-history  # CRUCIAL: No history, much faster!
+          gclient sync --nohooks -r src@HEAD #Sync to the HEAD of src, don't fetch full tree.
 
-      - name: Install dependencies
+      - name: Cache Chromium source
+        uses: actions/cache@v4
+        id: cache-chromium
+        with:
+          path: chromium
+          key: ${{ runner.os }}-chromium-v3-${{ hashFiles('chromium/src/DEPS') }} #Cache based on DEPS changes
+          restore-keys: |
+            ${{ runner.os }}-chromium-v3-
+
+      - name: Install dependencies (if chromium cache missed)
+        if: steps.cache-chromium.outputs.cache-hit != 'true'
         run: |
           cd chromium/src
           ./build/install-build-deps.sh
@@ -38,10 +58,11 @@ jobs:
           cd chromium/src
           gn gen out/ios --args='target_os="ios" target_cpu="arm64" is_component_build=false is_debug=false'
 
-      - name: Build Blink
+      - name: Build Blink (Smaller Target)
         run: |
           cd chromium/src
-          ninja -C out/ios blink_tests
+          ninja -C out/ios blink # Build a smaller, representative Blink target
+          # Other good minimal targets:  content_shell,  blink_core (even smaller)
 
       - name: Upload Blink Build Artifacts
         uses: actions/upload-artifact@v4
