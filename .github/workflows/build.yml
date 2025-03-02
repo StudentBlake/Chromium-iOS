@@ -1,7 +1,10 @@
-name: Build Blink Chrome for iOS
+name: Build Chromium Blink for iOS
 
 on:
   push:
+    branches:
+      - main
+  pull_request:
     branches:
       - main
   workflow_dispatch:
@@ -11,42 +14,37 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install Xcode
+      - name: Set up depot_tools
         run: |
-          sudo xcode-select --switch /Applications/Xcode.app
-          sudo xcodebuild -license accept
-
-      - name: Install Dependencies
-        run: |
-          # Install depot_tools
           git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-          echo 'export PATH="$PATH:$PWD/depot_tools"' >> ~/.bash_profile
-          source ~/.bash_profile
-          
-          # Fetch Chromium for iOS
-          git clone --depth 1 https://source.chromium.org/chromium/chromium/src/+/main:ios/ chromium
-          cd chromium
+          echo "$(pwd)/depot_tools" >> $GITHUB_PATH
 
-
-      - name: Build Blink Chrome for iOS
+      - name: Fetch Chromium source
         run: |
-          # Set up the build for Blink on iOS
-          echo "[gn_args]" > ~/.setup-gn
-          echo "use_blink = true" >> ~/.setup-gn
+          mkdir chromium && cd chromium
+          fetch --nohooks ios
+          gclient sync --nohooks --with_branch_heads --with_tags
 
-          # Run the setup script
-          python3 build/tools/setup-gn.py
-
-          # Build Blink Chrome for iOS
-          autoninja -C out/Release-iphonesimulator content_shell
-
-      - name: Archive IPA
+      - name: Install dependencies
         run: |
-          cd out/Release-iphonesimulator
-          xcodebuild -exportArchive -archivePath content_shell.xcarchive -exportOptionsPlist ExportOptions.plist -exportPath content_shell
+          cd chromium/src
+          ./build/install-build-deps.sh
+          sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 
-      - name: Upload IPA to temp.sh
+      - name: Run GN to configure the build
         run: |
-          curl -F "file=@out/Release-iphonesimulator/content_shell/content_shell.ipa" https://temp.sh/upload
+          cd chromium/src
+          gn gen out/ios --args='target_os="ios" target_cpu="arm64" is_component_build=false is_debug=false'
+
+      - name: Build Blink
+        run: |
+          cd chromium/src
+          ninja -C out/ios blink_tests
+
+      - name: Upload Blink Build Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: blink-build-ios
+          path: chromium/src/out/ios
