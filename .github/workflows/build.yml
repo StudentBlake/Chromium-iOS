@@ -50,7 +50,6 @@ jobs:
         if: steps.cache-chromium.outputs.cache-hit != 'true'
         run: |
           cd chromium/src
-          ./build/install-build-deps.sh
           sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 
       - name: Run GN to configure the build
